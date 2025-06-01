@@ -2,21 +2,33 @@
 from dash import Dash, dcc, html, Input, Output, callback, dash_table, State
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
 
 #%% Import data
-
-
-
 ratings_df = pd.read_csv("data/ml-32m/ratings.csv")
 movie_df = pd.read_csv("data/ml-32m/movies.csv")
 
-df = movie_df
-df = df.head(100)
-
 #%% Pandas processing
+#Add/edit new columns
+ratings_df['timestamp'] = pd.to_datetime(ratings_df['timestamp'], unit='s') #change timestamp to datetime
+ratings_df['review_year'] = ratings_df['timestamp'].dt.year #add review year
+
+
 movie_Series = movie_df['title'] #Series of movies titles + movieIDs
 movie_list = movie_Series.values #List of movie titles
+
+#%%sandboxing cell for development purposes, delete or comment out before commit
+#ratings = ratings_df.loc[ratings_df['movieId'] == 5445]
+
+# movie = 'Heat'
+# year = '1995'
+# title = movie + " (" + year + ")"
+
+# movieID = movie_df.loc[movie_df['title'] == title, 'movieId'].iloc[0]
+# movieID
+
+
 
 
 #%% Run the app
@@ -43,7 +55,8 @@ app.layout = [
 
     html.Div(id = 'movie-name', children="The movieID is:"),
 
-    dcc.Graph(id="histogram_ratings", figure=None)
+    dcc.Graph(id="histogram_ratings", figure=None),
+    dcc.Graph(id="ratings_over_time", figure=None)
     #TODO:Add more graphs
     ]
 
@@ -51,6 +64,7 @@ app.layout = [
 @callback(
     Output('movie-name', 'children'),
     Output('histogram_ratings', 'figure'),
+    Output('ratings_over_time', 'figure'),
     Input('submit-values', 'n_clicks'),
     State('movie-field', 'value'),
     State('year-field', 'value'),
@@ -62,21 +76,28 @@ def update_output(n_clicks,movie,year):
 
     if title in movie_list:
         #Get movieID
-        movieId = list(movie_Series).index(title) + 1 #Index of data starts with 1
+        movieId = movie_df.loc[movie_df['title'] == title, 'movieId'].iloc[0]
 
-        #Histogram Plot Creation
+        #Rating Histogram Plot Creation
         ratings = ratings_df.loc[ratings_df['movieId'] == movieId]
-        histogram = px.histogram(ratings, x="rating")
+        rating_histogram = px.histogram(ratings, x="rating", title='Rating Distribution')
 
-        #TODO: Insert more plots below
+
+        #Rating Over Time Plot Creation
+        #Group Timestamps
+        yearly_ratings = ratings.groupby(['review_year']).mean()
+        rating_over_time_movie = px.line(yearly_ratings, x=yearly_ratings.index, y='rating', 
+                                         range_y = [0,5], title='Rating Over Time')
+
+        #TODO: Insert more plots
 
     #Must have one return variable for each defined Output
     if movieId != 0:
         return 'The movieID is: {}'.format(
             movieId,
-        ), histogram
+        ), rating_histogram, rating_over_time_movie
     else:
-        return 'Movie Not Found', None
+        return 'Movie Not Found', None, None
 
 
 
