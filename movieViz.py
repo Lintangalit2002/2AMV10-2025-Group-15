@@ -4,10 +4,10 @@ import plotly.express as px
 import numpy as np
 
 #%% Import data
-df_ratings = pd.read_csv("data/ml-32m/ratings.csv").head(10000)
-df_movies = pd.read_csv("data/ml-32m/movies.csv").head(10000)
-df_tags = pd.read_csv("data/ml-32m/tags.csv").head(10000)
-df_links = pd.read_csv("data/ml-32m/links.csv").head(10000)
+df_ratings = pd.read_csv("data/ml-32m/ratings.csv").head(1000)
+df_movies = pd.read_csv("data/ml-32m/movies.csv").head(1000)
+df_tags = pd.read_csv("data/ml-32m/tags.csv").head(1000)
+df_links = pd.read_csv("data/ml-32m/links.csv").head(1000)
 
 #%% Pandas processing
 #Add/edit new columns
@@ -26,20 +26,29 @@ df_genre = df_genre.explode('genres')
 all_genres = sorted(df_genre['genres'].unique())
 top_10_genres = df_genre['genres'].value_counts().head(10).index.tolist()
 #%%sandboxing cell for development purposes, delete or comment out before commit
-#ratings = ratings_df.loc[ratings_df['movieId'] == 5445]
+import numpy as np
+import pandas as pd
+import plotly.express as px
 
-movie = 'Heat'
-year = '1995'
-title = movie + " (" + year + ")"
+x0 = np.random.randn(250)
+# Add 1 to shift the mean of the Gaussian distribution
+x1 = np.random.randn(500) + 1
 
-movieID = df_movies.loc[df_movies['title'] == title, 'movieId'].iloc[0]
-movieID
+df = pd.DataFrame(dict(
+    series=np.concatenate((["a"] * len(x0), ["b"] * len(x1))), 
+    data=np.concatenate((x0, x1))
+))
+
+df
+
+px.histogram(df, x="data", color="series", barmode="overlay")
 
 #%% Run the app
 app = Dash()
 
 # Requires Dash 2.17.0 or later
 app.layout = [
+    #Movie Specific Section
     html.H1("Insert Movie and year:"),
     #TODO:Insert suggested dropdown so users dont have to know the specific movie
     html.Div([
@@ -63,6 +72,7 @@ app.layout = [
     dcc.Graph(id="ratings_over_time", figure=None),
     #TODO:Add more graphs
 
+    #Genre Section
     html.Div([
     html.H1("Movie Ratings by Genre"),
 
@@ -81,10 +91,11 @@ app.layout = [
     ),
 
     dcc.Graph(id='genre-rating-graph'),
+    dcc.Graph(id='genre_histogram'),
 
     html.Hr(),
     html.H3("Tags Data Table"),
-    dash_table.DataTable(data=df_tags.to_dict('records'), page_size=10),
+    dash_table.DataTable(data=df_tags.to_dict('records'), page_size=10)
 ])]
 
 
@@ -139,18 +150,22 @@ def reset_genres(n_clicks):
 # Callback to update graph
 @app.callback(
     Output('genre-rating-graph', 'figure'),
+    Output('genre_histogram','figure'),
     Input('genre-selector', 'value')
 )
 def update_graph(selected_genres):
     if not selected_genres:
-        return px.bar(title="No genres selected")
+        return px.bar(title="No genres selected"), None
     
     filtered_df = df_genre[df_genre['genres'].isin(selected_genres)]
     genre_avg_rating = filtered_df.groupby('genres')['rating'].mean().reset_index()
     genre_avg_rating = genre_avg_rating.rename(columns={'rating': 'average_rating'})
     genre_avg_rating = genre_avg_rating.sort_values(by='average_rating', ascending=False)
 
-    fig = px.bar(
+    #rating distribution of selected genres
+    genre_rating_histogram = px.histogram(filtered_df, x="rating", color='genres', barmode='overlay', title='Rating Distribution')
+
+    genre_rating_bar_chart = px.bar(
         genre_avg_rating,
         x='genres',
         y='average_rating',
@@ -158,8 +173,8 @@ def update_graph(selected_genres):
         title='Average Rating per Selected Genre',
         labels={'genres': 'Genre', 'average_rating': 'Average Rating'}
     )
-    fig.update_traces(texttemplate='%{text:.2f}', textposition='inside')
-    return fig
+    genre_rating_bar_chart.update_traces(texttemplate='%{text:.2f}', textposition='inside')
+    return genre_rating_bar_chart, genre_rating_histogram
 
 
 
