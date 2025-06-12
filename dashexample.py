@@ -3,10 +3,15 @@ import pandas as pd
 import plotly.express as px
 
 #%% Import data
+<<<<<<< Updated upstream
 df_tags = pd.read_csv("data/ml-32m/tags.csv").head(1000)
 df_movies = pd.read_csv("data/ml-32m/movies.csv").head(1000)
 df_ratings = pd.read_csv("data/ml-32m/ratings.csv").head(1000)
 df_links = pd.read_csv("data/ml-32m/links.csv").head(1000)
+=======
+ratings_df = pd.read_csv("C:/Users/nurvo/Documents/GitHub/2AMV10-2025-Group-15/data/ml-32m/ratings.csv")
+movie_df = pd.read_csv("C:/Users/nurvo/Documents/GitHub/2AMV10-2025-Group-15/data/ml-32m/movies.csv")
+>>>>>>> Stashed changes
 
 #%% Processing
 df_genre = pd.merge(df_ratings, df_movies, on="movieId")
