@@ -345,7 +345,7 @@ def update_tsne(n_clicks, selected_features, perplexity):
     feature_blocks = []
 
     if 'genres' in selected_features:
-        df['genres'] = df['genres'].astype(str).str.split('|')
+        df['genres'] = df['genres'].apply(lambda x: x if isinstance(x, list) else str(x).split('|'))
         mlb = MultiLabelBinarizer()
         genre_matrix = mlb.fit_transform(df['genres'])
         genre_df = pd.DataFrame(genre_matrix, index=df.index)
@@ -397,8 +397,6 @@ def find_movie(n_clicks,data,movie_name):
 
     x = df_find.loc[df_find['title'] == movie_name, 'x']
     y = df_find.loc[df_find['title'] == movie_name, 'y']
-    print(x.iloc[0])
-    print(y.iloc[0])
 
     return "The coordinates are: (" + str(x.iloc[0]) + "," + str(y.iloc[0]) + ")"
 
