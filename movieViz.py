@@ -48,29 +48,7 @@ app = Dash()
 # Requires Dash 2.17.0 or later
 app.layout = [
     dcc.Store(id='tsne-data'),
-    html.H1("Insert Movie and year:"),
-    #TODO:Insert suggested dropdown so users dont have to know the specific movie
-    html.Div([
-        
-        dcc.Input(
-        id = "movie-field",
-        type = 'text',
-        ),
-        dcc.Input(
-        id = "year-field",
-        type = 'text',
-        ),
-        html.Button('Search', id='submit-values', n_clicks=0)
-    ]),
-
-    #dash_table.DataTable(data=df.to_dict('records'), page_size=10),
-
-    html.Div(id = 'movie-name', children="The movieID is:"),
-
-    dcc.Graph(id="histogram_ratings", figure=None),
-    dcc.Graph(id="ratings_over_time", figure=None),
-    #TODO:Add more graphs
-
+    
     html.Div([
     html.H1("Movie Ratings by Genre"),
 
@@ -90,13 +68,38 @@ app.layout = [
 
     dcc.Graph(id='genre-rating-graph'),
 
-    html.Hr(),
-    html.H3("Tags Data Table"),
-    dash_table.DataTable(data=df_tags.to_dict('records'), page_size=10),
+    # html.Hr(),
+    # html.H3("Tags Data Table"),
+    # dash_table.DataTable(data=df_tags.to_dict('records'), page_size=10),
 
+    
     html.Hr(),
     html.H1("Movie Map"),
     html.Div([
+        html.Div([
+            html.H1("Insert Movie and year:"),
+            dcc.Input(
+            id = "movie-field",
+            type = 'text',
+            ),
+            dcc.Input(
+            id = "year-field",
+            type = 'text',
+            ),
+            html.Button('Search', id='submit-values', n_clicks=0),
+            
+            html.Button('Find in Graph', id='find-in-graph',n_clicks = 0), #give coordinates of movie in graph if it exists
+
+            html.Div(id = 'movie-name', children="The movieID is:"),
+            html.Div(id = 'movie-coordinates', children='The coordinates are: (x,y)'),
+
+            dcc.Graph(id="histogram_ratings", figure=None),
+            dcc.Graph(id="ratings_over_time", figure=None),
+        ]),
+
+        #dash_table.DataTable(data=df.to_dict('records'), page_size=10),
+
+        
         # filters on the left
         html.Div([
             html.Label("Filter by genre:"),
@@ -382,5 +385,23 @@ def update_tsne(n_clicks, selected_features, perplexity):
     )
 
 
+@app.callback(
+        Output('movie-coordinates','children'),
+        Input('find-in-graph','n_clicks'),
+        State('tsne-data','data'),
+        State('movie-field','value'),
+        prevent_initial_call=True
+)
+def find_movie(n_clicks,data,movie_name):
+    df_find = pd.DataFrame(data)
+
+    x = df_find.loc[df_find['title'] == movie_name, 'x']
+    y = df_find.loc[df_find['title'] == movie_name, 'y']
+    print(x.iloc[0])
+    print(y.iloc[0])
+
+    return "The coordinates are: (" + str(x.iloc[0]) + "," + str(y.iloc[0]) + ")"
+
+#%%
 if __name__ == '__main__':
     app.run(debug=True)
