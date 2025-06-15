@@ -92,9 +92,11 @@ app.layout = [
 
             html.Div(id = 'movie-name', children="The movieID is:"),
             html.Div(id = 'movie-coordinates', children='The coordinates are: (x,y)'),
-
+            
+            html.div([
             dcc.Graph(id="histogram_ratings", figure=None),
             dcc.Graph(id="ratings_over_time", figure=None),
+            ]),
         ]),
 
         #dash_table.DataTable(data=df.to_dict('records'), page_size=10),
@@ -195,7 +197,14 @@ app.layout = [
             ]),
             html.Button("Compute t-SNE", id='tsne-run-button', n_clicks=0),
             html.Div(id='tsne-status', style={'marginTop': '10px', 'color': 'green'}),
-        ], style={'flex': '3', 'padding': '20px'})
+        ], style={'flex': '3', 'padding': '20px'}),
+
+        html.Div([
+            html.Div(id = "selected-movie-list", children = "Selected movies:"),
+
+            dcc.Graph
+        ])
+        
     ], style={'display': 'flex', 'flexDirection': 'row', 'width': '100%'})
 
 
@@ -384,7 +393,7 @@ def update_tsne(n_clicks, selected_features, perplexity):
         f"t-SNE completed with {len(df)} points using perplexity {perplexity}."
     )
 
-
+#Find movie written in field on the graph
 @app.callback(
         Output('movie-coordinates','children'),
         Input('find-in-graph','n_clicks'),
@@ -399,6 +408,24 @@ def find_movie(n_clicks,data,movie_name):
     y = df_find.loc[df_find['title'] == movie_name, 'y']
 
     return "The coordinates are: (" + str(x.iloc[0]) + "," + str(y.iloc[0]) + ")"
+
+#Find 
+@app.callback(
+    Output('selected-movie-list','children'),
+    Input('tsne-plot','selectedData'),
+    State('tsne-data','data'),
+    prevent_initial_call = True
+)
+def process_selection(selectedData,tsne_data):
+    df = pd.DataFrame(tsne_data)
+
+    point_indices = [point['pointIndex'] for point in selectedData['points']]
+    
+    rows = df.iloc[point_indices]
+    movies = rows['title'].to_list()
+    
+    
+    return("test")
 
 #%%
 if __name__ == '__main__':
