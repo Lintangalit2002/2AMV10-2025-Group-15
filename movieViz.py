@@ -1,4 +1,5 @@
-from dash import Dash, dcc, html, dash_table, Input, Output, State, ctx, callback
+#%% Imports
+from dash import Dash, dcc, html, dash_table, Input, Output, State, ctx, callback, MATCH, ALL
 import pandas as pd
 import plotly.express as px
 import numpy as np
@@ -7,12 +8,12 @@ from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
 from sklearn.manifold import TSNE
 
 #%% Import data
-df_ratings = pd.read_csv("data/ml-32m/ratings.csv").head(10000)
-df_movies = pd.read_csv("data/ml-32m/movies.csv").head(10000)
-df_tags = pd.read_csv("data/ml-32m/tags.csv").head(10000)
-df_links = pd.read_csv("data/ml-32m/links.csv").head(10000)
-df_genre = pd.read_csv("data/df_genre_ratings.csv").head(10000)
-df_combined = pd.read_csv("data/df_combined.csv").head(10000)
+df_ratings = pd.read_csv("data/ml-32m/ratings.csv").head(1000)
+df_movies = pd.read_csv("data/ml-32m/movies.csv").head(1000)
+df_tags = pd.read_csv("data/ml-32m/tags.csv").head(1000)
+df_links = pd.read_csv("data/ml-32m/links.csv").head(1000)
+df_genre = pd.read_csv("data/df_genre_ratings.csv").head(1000)
+df_combined = pd.read_csv("data/df_combined.csv").head(1000)
 
 # determine unique genres and languages
 df_combined['genres'] = df_combined['genres'].apply(
@@ -33,14 +34,6 @@ movie_list = movie_Series.values #List of movie titles
 all_genres = sorted(df_genre['genres'].unique())
 top_10_genres = df_genre['genres'].value_counts().head(10).index.tolist()
 #%%sandboxing cell for development purposes, delete or comment out before commit
-#ratings = ratings_df.loc[ratings_df['movieId'] == 5445]
-
-movie = 'Heat'
-year = '1995'
-title = movie + " (" + year + ")"
-
-movieID = df_movies.loc[df_movies['title'] == title, 'movieId'].iloc[0]
-movieID
 
 #%% Run the app
 app = Dash()
@@ -93,7 +86,7 @@ app.layout = [
             html.Div(id = 'movie-name', children="The movieID is:"),
             html.Div(id = 'movie-coordinates', children='The coordinates are: (x,y)'),
             
-            html.div([
+            html.Div([
             dcc.Graph(id="histogram_ratings", figure=None),
             dcc.Graph(id="ratings_over_time", figure=None),
             ]),
@@ -199,13 +192,15 @@ app.layout = [
             html.Div(id='tsne-status', style={'marginTop': '10px', 'color': 'green'}),
         ], style={'flex': '3', 'padding': '20px'}),
 
-        html.Div([
-            html.Div(id = "selected-movie-list", children = "Selected movies:"),
-
-            dcc.Graph
-        ])
         
-    ], style={'display': 'flex', 'flexDirection': 'row', 'width': '100%'})
+    ], style={'display': 'flex', 'flexDirection': 'row', 'width': '100%'}),
+
+    html.Div([
+            html.Div(id = "selected-movie-list", children = "Selected movies:"),
+            html.Button("Generate Checkboxes", id="generate-btn"),
+            html.Div(id='checkbox-container'),
+            html.Div(id='output')
+        ])
 
 
 ])]
@@ -409,23 +404,61 @@ def find_movie(n_clicks,data,movie_name):
 
     return "The coordinates are: (" + str(x.iloc[0]) + "," + str(y.iloc[0]) + ")"
 
-#Find 
+#Select from map
+# @app.callback(
+#     Output('selected-movie-list','children'),
+    
+#     Input('tsne-plot','selectedData'),
+#     State('tsne-data','data'),
+#     prevent_initial_call = True
+# )
+# def process_selection(selectedData,tsne_data):
+#     df = pd.DataFrame(tsne_data)
+
+#     point_indices = [point['pointIndex'] for point in selectedData['points']]
+
+#     rows = df.iloc[point_indices]
+#     movies = rows['title'].to_list()
+    
+#     print(rows[0])
+#     return("test")
+
+
 @app.callback(
-    Output('selected-movie-list','children'),
+    Output('checkbox-container', 'children'),
     Input('tsne-plot','selectedData'),
     State('tsne-data','data'),
-    prevent_initial_call = True
+    prevent_initial_call=True
 )
-def process_selection(selectedData,tsne_data):
+def generate_checkboxes(selectedData,tsne_data):
     df = pd.DataFrame(tsne_data)
 
     point_indices = [point['pointIndex'] for point in selectedData['points']]
-    
+
     rows = df.iloc[point_indices]
     movies = rows['title'].to_list()
+
+    print(rows.iloc[0])
+
+    df_movies
+
+    checkbox_items = movies
     
-    
-    return("test")
+    return [
+        dcc.Checklist(
+            options=[{'label': item, 'value': item}],
+            value=[item],
+            id={'type': 'dynamic-checkbox', 'index': i}
+        ) for i, item in enumerate(checkbox_items)
+    ]
+
+@app.callback(
+    Output('output', 'children'),
+    Input({'type': 'dynamic-checkbox', 'index': ALL}, 'value')
+)
+def read_checkbox_values(values):
+    # values is a list of selected values per checkbox
+    return f"Selected: {values}"
 
 #%%
 if __name__ == '__main__':
