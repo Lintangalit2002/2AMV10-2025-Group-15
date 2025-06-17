@@ -6,6 +6,7 @@ import numpy as np
 import ast
 from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
 from sklearn.manifold import TSNE
+from sklearn.metrics.pairwise import cosine_similarity
 
 #%% Import data
 df_ratings = pd.read_csv("data/ml-32m/ratings.csv").head(1000)
@@ -33,6 +34,15 @@ movie_list = movie_Series.values #List of movie titles
 
 all_genres = sorted(df_genre['genres'].unique())
 top_10_genres = df_genre['genres'].value_counts().head(10).index.tolist()
+
+min_year, max_year = df_combined['year'].min(), df_combined['year'].max()
+min_budget,max_budget = df_combined['budget'].min(), df_combined['budget'].max()
+min_rating,max_rating = df_combined['average_rating'].min(), df_combined['average_rating'].max()
+min_runtime,max_runtime = df_combined['runtime'].min(), df_combined['runtime'].max()
+
+
+
+
 #%%sandboxing cell for development purposes, delete or comment out before commit
 
 #%% Run the app
@@ -60,6 +70,7 @@ app.layout = [
     ),
 
     dcc.Graph(id='genre-rating-graph'),
+    dcc.Graph(id='genre-histogram'),
 
     # html.Hr(),
     # html.H3("Tags Data Table"),
@@ -196,14 +207,54 @@ app.layout = [
     ], style={'display': 'flex', 'flexDirection': 'row', 'width': '100%'}),
 
     html.Div([
-            html.Div(id = "selected-movie-list", children = "Selected movies:"),
-            html.Button("Generate Checkboxes", id="generate-btn"),
+            html.H1("Selected Movies:"),
             html.Div(id='checkbox-container'),
-            html.Div(id='output')
+            html.H2("Similarity Feature Weights"),
+            html.Div([
+                
+                dcc.Input(
+                id = "budget-weight",
+                type = 'number',
+                placeholder="Budget Weight..."
+                ),
+                
+                dcc.Input(
+                id = "runtime-weight",
+                type = 'number',
+                placeholder="Runtime Weight..."
+                ),
+                dcc.Input(
+                id = "year-weight",
+                type = 'number',
+                placeholder="Year Weight..."
+                ),
+                dcc.Input(
+                id = "rating-weight",
+                type = 'number',
+                placeholder="Rating Weight..."
+                ),
+                dcc.Input(
+                id = "genre-weight",
+                type = 'number',
+                placeholder="Genre Weight..."
+                )
+            ]),
+            html.Div([
+                html.Div(children=[
+                dcc.Graph(id='similarity_heatmap', style={'display': 'inline-block'}),
+                dcc.Graph(id = 'selected_movies_rating_over_time', style={'display': 'inline-block'})
+                ])
+            ],style={'flex': '3', 'padding': '20px'})
+            
         ])
 
 
 ])]
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------#
+#-------------------------------------------------------------------Button Logic Start-------------------------------------------------------------------#
+
 
 
 #Button Logic, can add more input fields and output graphs etc. later
@@ -254,9 +305,11 @@ def update_output(n_clicks,movie,year):
 def reset_genres(n_clicks):
     return top_10_genres
 
-# Callback to update graph
+# Callback to update genre graph
 @app.callback(
+        
     Output('genre-rating-graph', 'figure'),
+    Output('genre-histogram', 'figure'),
     Input('genre-selector', 'value')
 )
 def update_graph(selected_genres):
@@ -268,6 +321,9 @@ def update_graph(selected_genres):
     genre_avg_rating = genre_avg_rating.rename(columns={'rating': 'average_rating'})
     genre_avg_rating = genre_avg_rating.sort_values(by='average_rating', ascending=False)
 
+    #rating distribution of selected genres
+    genre_rating_histogram = px.histogram(filtered_df, x="rating", color='genres', barmode='stack', title='Rating Distribution')
+
     fig = px.bar(
         genre_avg_rating,
         x='genres',
@@ -277,7 +333,7 @@ def update_graph(selected_genres):
         labels={'genres': 'Genre', 'average_rating': 'Average Rating'}
     )
     fig.update_traces(texttemplate='%{text:.2f}', textposition='inside')
-    return fig
+    return fig, genre_rating_histogram
 
 # For t-SNE
 @app.callback(
@@ -365,7 +421,7 @@ def update_tsne(n_clicks, selected_features, perplexity):
         feature_blocks.append(numeric_df.values)
 
     if not feature_blocks:
-        return dash.no_update, "No features selected. Please select at least one."
+        return Dash.no_update, "No features selected. Please select at least one."
 
     full_feature_matrix = np.hstack(feature_blocks)
     scaled = StandardScaler().fit_transform(full_feature_matrix)
@@ -420,7 +476,6 @@ def find_movie(n_clicks,data,movie_name):
 #     rows = df.iloc[point_indices]
 #     movies = rows['title'].to_list()
     
-#     print(rows[0])
 #     return("test")
 
 
@@ -438,10 +493,6 @@ def generate_checkboxes(selectedData,tsne_data):
     rows = df.iloc[point_indices]
     movies = rows['title'].to_list()
 
-    print(rows.iloc[0])
-
-    df_movies
-
     checkbox_items = movies
     
     return [
@@ -453,12 +504,78 @@ def generate_checkboxes(selectedData,tsne_data):
     ]
 
 @app.callback(
-    Output('output', 'children'),
-    Input({'type': 'dynamic-checkbox', 'index': ALL}, 'value')
+    Output('similarity_heatmap','figure'),
+    Input({'type': 'dynamic-checkbox', 'index': ALL}, 'value'),
+    State('tsne-plot','selectedData'),
+    State('tsne-data','data'),
+    State('budget-weight','value'),
+    State('runtime-weight','value'),
+    State('year-weight','value'),
+    State('rating-weight','value'),
+    State('genre-weight','value'),
+    prevent_initial_call=True
 )
-def read_checkbox_values(values):
+def read_checkbox_values(values,selectedData,tsne_data,budget_weight,runtime_weight,year_weight,rating_weight,genre_weight):
     # values is a list of selected values per checkbox
-    return f"Selected: {values}"
+    values = [item[0] for item in values if item]
+    number_weights = [budget_weight,runtime_weight,year_weight,rating_weight]
+
+    df = pd.DataFrame(tsne_data)
+
+    point_indices = [point['pointIndex'] for point in selectedData['points']]
+
+    rows = df.iloc[point_indices]
+    rows = rows[rows['title'].isin(values)] #filter based on checkbox
+
+
+    #calculate jaccard similarity of genres
+    genre_similarity = []
+    for i in range(0,rows.shape[0]):
+        similarity_current_row = []
+        for j in range(0,rows.shape[0]):
+            similarity_current_row.append(jaccard_similarity(rows['genres'].iloc[i], rows['genres'].iloc[j]))
+        genre_similarity.append(similarity_current_row)
+
+    rows = rows.drop(['title','genres','x','y','original_language'], axis = 1)
+
+    #normalize data with original min max values
+    rows['year'] = (rows['year'] - min_year) / (max_year-min_year)
+    rows['budget'] = (rows['budget'] - min_budget) / (max_budget-min_budget)
+    rows['runtime'] = (rows['runtime'] - min_runtime) / (max_runtime-min_runtime)
+    rows['average_rating'] = (rows['average_rating'] - min_rating) / (max_rating-min_rating)
+
+
+
+    numerical_similarity = []
+    for i in range(0,rows.shape[0]):
+        
+        numerical_similarity_current_row = []
+        for j in range(0,rows.shape[0]):
+            first_row = (rows.iloc[i] * number_weights)
+            second_row = (rows.iloc[j] * number_weights)
+            similarity = cosine_similarity([first_row.values],[second_row.values])[0][0]
+            numerical_similarity_current_row.append(similarity)
+        numerical_similarity.append(numerical_similarity_current_row)
+    
+    #print(numerical_similarity)
+    #print(genre_similarity)
+
+    similarity_matrix = np.add(np.multiply(numerical_similarity,4.0),np.multiply(genre_similarity,genre_weight))
+    similarity_matrix = np.divide(similarity_matrix,4+genre_weight)
+
+    print(similarity_matrix)
+
+    similarity_heatmap = px.imshow(similarity_matrix,x=values,y=values,zmin=0,zmax=1,title="Similarity Heatmap")
+
+    return similarity_heatmap
+
+def jaccard_similarity(list1, list2):
+    set1, set2 = set(list1), set(list2)
+    intersection = set1 & set2
+    union = set1 | set2
+    if not union:
+        return 0
+    return len(intersection) / len(union)
 
 #%%
 if __name__ == '__main__':
