@@ -215,28 +215,33 @@ app.layout = [
                 dcc.Input(
                 id = "budget-weight",
                 type = 'number',
-                placeholder="Budget Weight..."
+                placeholder="Budget Weight...",
+                value = 1
                 ),
                 
                 dcc.Input(
                 id = "runtime-weight",
                 type = 'number',
-                placeholder="Runtime Weight..."
+                placeholder="Runtime Weight...",
+                value = 1
                 ),
                 dcc.Input(
                 id = "year-weight",
                 type = 'number',
-                placeholder="Year Weight..."
+                placeholder="Year Weight...",
+                value = 1
                 ),
                 dcc.Input(
                 id = "rating-weight",
                 type = 'number',
-                placeholder="Rating Weight..."
+                placeholder="Rating Weight...",
+                value = 1
                 ),
                 dcc.Input(
                 id = "genre-weight",
                 type = 'number',
-                placeholder="Genre Weight..."
+                placeholder="Genre Weight...",
+                value = 1
                 )
             ]),
             html.Div([
@@ -488,9 +493,9 @@ def find_movie(n_clicks,data,movie_name):
 def generate_checkboxes(selectedData,tsne_data):
     df = pd.DataFrame(tsne_data)
 
-    point_indices = [point['pointIndex'] for point in selectedData['points']]
+    point_indices = [point['hovertext'] for point in selectedData['points']]
 
-    rows = df.iloc[point_indices]
+    rows = df.loc[df['title'].isin(point_indices)]
     movies = rows['title'].to_list()
 
     checkbox_items = movies
@@ -520,11 +525,18 @@ def read_checkbox_values(values,selectedData,tsne_data,budget_weight,runtime_wei
     values = [item[0] for item in values if item]
     number_weights = [budget_weight,runtime_weight,year_weight,rating_weight]
 
+    for i in number_weights:
+        if i is None:
+            i = 1
+    
+    if genre_weight is None:
+        genre_weight = 1
+
     df = pd.DataFrame(tsne_data)
 
-    point_indices = [point['pointIndex'] for point in selectedData['points']]
+    point_indices = [point['hovertext'] for point in selectedData['points']]
 
-    rows = df.iloc[point_indices]
+    rows = df.loc[df['title'].isin(point_indices)]
     rows = rows[rows['title'].isin(values)] #filter based on checkbox
 
 
@@ -576,6 +588,9 @@ def jaccard_similarity(list1, list2):
     if not union:
         return 0
     return len(intersection) / len(union)
+
+
+
 
 #%%
 if __name__ == '__main__':
