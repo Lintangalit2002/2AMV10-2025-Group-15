@@ -9,12 +9,12 @@ from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import cosine_similarity
 
 #%% Import data
-df_ratings = pd.read_csv("data/ml-32m/ratings.csv").head(1000)
-df_movies = pd.read_csv("data/ml-32m/movies.csv").head(1000)
-df_tags = pd.read_csv("data/ml-32m/tags.csv").head(1000)
-df_links = pd.read_csv("data/ml-32m/links.csv").head(1000)
-df_genre = pd.read_csv("data/df_genre_ratings.csv").head(1000)
-df_combined = pd.read_csv("data/df_combined.csv").head(1000)
+df_ratings = pd.read_csv("data/ml-32m/ratings.csv").head(10000)
+df_movies = pd.read_csv("data/ml-32m/movies.csv").head(10000)
+df_tags = pd.read_csv("data/ml-32m/tags.csv").head(10000)
+df_links = pd.read_csv("data/ml-32m/links.csv").head(10000)
+df_genre = pd.read_csv("data/df_genre_ratings.csv").head(10000)
+df_combined = pd.read_csv("data/df_combined.csv").head(10000)
 
 # determine unique genres and languages
 df_combined['genres'] = df_combined['genres'].apply(
@@ -247,7 +247,11 @@ app.layout = [
             html.Div([
                 html.Div(children=[
                 dcc.Graph(id='similarity_heatmap', style={'display': 'inline-block'}),
-                dcc.Graph(id = 'selected_movies_rating_over_time', style={'display': 'inline-block'})
+                html.Button("Find Most and Least Similar Movies", id = "find-similar"),
+                html.Div(id = "most-similar", children=[
+                    html.P("Most Similar:"),
+                    html.P("Least Similar:")
+                    ])
                 ])
             ],style={'flex': '3', 'padding': '20px'})
             
@@ -568,14 +572,9 @@ def read_checkbox_values(values,selectedData,tsne_data,budget_weight,runtime_wei
             similarity = cosine_similarity([first_row.values],[second_row.values])[0][0]
             numerical_similarity_current_row.append(similarity)
         numerical_similarity.append(numerical_similarity_current_row)
-    
-    #print(numerical_similarity)
-    #print(genre_similarity)
 
     similarity_matrix = np.add(np.multiply(numerical_similarity,4.0),np.multiply(genre_similarity,genre_weight))
     similarity_matrix = np.divide(similarity_matrix,4+genre_weight)
-
-    print(similarity_matrix)
 
     similarity_heatmap = px.imshow(similarity_matrix,x=values,y=values,zmin=0,zmax=1,title="Similarity Heatmap")
 
@@ -589,7 +588,55 @@ def jaccard_similarity(list1, list2):
         return 0
     return len(intersection) / len(union)
 
+@app.callback(
+    Output('most-similar', 'children'),
+    Input('find-similar','n_clicks'),
+    State('tsne-plot','selectedData'),
+    State('tsne-data','data'),
+    prevent_initial_call=True
+)
+def find_similar_movies(n_clicks, selectedData,tsne_data):
+    df = pd.DataFrame(tsne_data)
 
+    html_output = []
+
+    point_indices = [point['hovertext'] for point in selectedData['points']]
+
+    rows = df.loc[df['title'].isin(point_indices)]
+
+    x0 = rows['x'].mean()
+    y0 = rows['y'].mean()
+
+    print(rows['title'].values) 
+
+    df = df[~df['title'].isin(rows['title'].values)]
+
+    # Compute Euclidean distance
+    df['distance'] = np.sqrt((df['x'] - x0)**2 + (df['y'] - y0)**2)
+
+    print(df['distance'])
+
+    # 3 closest points
+    closest_3 = df.nsmallest(3, 'distance')
+
+    # 3 farthest points
+    farthest_3 = df.nlargest(3, 'distance')
+
+    print(closest_3)
+
+    print(closest_3['title'].values)
+
+    html_output.append(html.H3('Most Similar Movies:'))
+    for row in closest_3['title'].values:
+        html_output.append(html.P(row))
+
+    html_output.append(html.H3('Least Similar Movies:'))
+    for row in farthest_3['title'].values:
+        html_output.append(html.P(row))
+
+    print(html_output)
+
+    return html_output
 
 
 #%%
