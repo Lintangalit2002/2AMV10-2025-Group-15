@@ -95,7 +95,6 @@ app.layout = [
         'fontSize': '26px',
         'marginBottom': '20px'
     }),
-    html.Div([
         html.Div([
             html.H2("Insert Movie and year:", style={
                 'fontSize': '26px',
@@ -122,6 +121,8 @@ app.layout = [
             ]),
         ]),
 
+    html.Div([
+        
         #dash_table.DataTable(data=df.to_dict('records'), page_size=10),
 
         
@@ -545,7 +546,7 @@ def find_movie(n_clicks, data, movie_name):
     row = df_find[df_find['title'] == movie_name].iloc[0]
     x, y = row['x'], row['y']
 
-    return f"Movie found and highlighted", movie_name
+    return [f"Movie found and highlighted at" + str(x) +","+ str(y), movie_name]
 
 #Select from map
 # @app.callback(
