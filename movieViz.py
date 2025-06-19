@@ -51,17 +51,29 @@ app = Dash()
 # Requires Dash 2.17.0 or later
 app.layout = [
     dcc.Store(id='tsne-data'),
+    dcc.Store(id='highlighted-movie'),
     
     html.Div([
-    html.H1("Movie Ratings by Genre"),
+        html.H1("Movie Exploration Tool", style={
+            'textAlign': 'center',
+            'fontSize': '36px',
+            'marginBottom': '10px'
+        }),
+        html.Hr(style={'borderTop': '3px solid black'}),
+        
+        html.H2("Movie Ratings by Genre", style={
+            'textAlign': 'center',
+            'fontSize': '26px',
+            'marginBottom': '20px'
+        }),
 
-    # Row with label and reset button side by side
     html.Div([
         html.Label("Select genres to compare:", style={'marginRight': '10px'}),
-        html.Button("Reset", id='reset-button', n_clicks=0)
+        html.Button("Reset", id='reset-button', n_clicks=0),
+        html.Button("Select All", id='select-all-genres', n_clicks=0, style={'marginLeft': '10px'}),
+        html.Button("Clear All", id='clear-all-genres', n_clicks=0, style={'marginLeft': '10px'}),
     ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '10px'}),
 
-    # Genre checklist
     dcc.Checklist(
         id='genre-selector',
         options=[{'label': genre, 'value': genre} for genre in all_genres],
@@ -78,10 +90,17 @@ app.layout = [
 
     
     html.Hr(),
-    html.H1("Movie Map"),
+    html.H2("Movie Map", style={
+        'textAlign': 'center',
+        'fontSize': '26px',
+        'marginBottom': '20px'
+    }),
     html.Div([
         html.Div([
-            html.H1("Insert Movie and year:"),
+            html.H2("Insert Movie and year:", style={
+                'fontSize': '26px',
+                'marginBottom': '10px'
+            }),
             dcc.Input(
             id = "movie-field",
             type = 'text',
@@ -129,7 +148,8 @@ app.layout = [
                 max=df_combined['year'].max(),
                 step=1,
                 value=[df_combined['year'].min(), df_combined['year'].max()],
-                marks={y: str(y) for y in range(int(df_combined['year'].min()), int(df_combined['year'].max()) + 1, 10)}
+                marks={},
+                tooltip={"placement": "bottom", "always_visible": True}
             ),
             html.Label("Runtime (minutes):"),
             dcc.RangeSlider(
@@ -141,7 +161,8 @@ app.layout = [
                 marks={
                     int(df_combined['runtime'].min()): str(int(df_combined['runtime'].min())),
                     int(df_combined['runtime'].max()): str(int(df_combined['runtime'].max()))
-                }
+                },
+                tooltip={"placement": "bottom", "always_visible": True}
             ),
             html.Label("Budget ($):"),
             dcc.RangeSlider(
@@ -153,7 +174,8 @@ app.layout = [
                 marks={
                     int(df_combined['budget'].min()): f"${int(df_combined['budget'].min()):,}",
                     int(df_combined['budget'].max()): f"${int(df_combined['budget'].max()):,}"
-                }
+                },
+                tooltip={"placement": "bottom", "always_visible": True}
             ),
             html.Label("Average Rating:"),
             dcc.RangeSlider(
@@ -309,29 +331,50 @@ def update_output(n_clicks,movie,year):
 @app.callback(
     Output('genre-selector', 'value'),
     Input('reset-button', 'n_clicks'),
+    Input('select-all-genres', 'n_clicks'),
+    Input('clear-all-genres', 'n_clicks'),
     prevent_initial_call=True
 )
-def reset_genres(n_clicks):
-    return top_10_genres
+def update_genre_selection(reset_clicks, select_all_clicks, clear_all_clicks):
+    triggered_id = ctx.triggered_id
+
+    if triggered_id == 'reset-button':
+        return top_10_genres
+    elif triggered_id == 'select-all-genres':
+        return all_genres
+    elif triggered_id == 'clear-all-genres':
+        return []
+    return dash.no_update
 
 # Callback to update genre graph
 @app.callback(
-        
     Output('genre-rating-graph', 'figure'),
     Output('genre-histogram', 'figure'),
     Input('genre-selector', 'value')
 )
 def update_graph(selected_genres):
     if not selected_genres:
-        return px.bar(title="No genres selected")
-    
+        empty_df = pd.DataFrame({'genres': [], 'average_rating': []})
+        empty_hist_df = pd.DataFrame({'rating': [], 'genres': []})
+
+        empty_fig1 = px.bar(empty_df, x='genres', y='average_rating', title="No genres selected")
+        empty_fig2 = px.histogram(empty_hist_df, x='rating', color='genres', barmode='stack', title="No genres selected")
+
+        return empty_fig1, empty_fig2
+
     filtered_df = df_genre[df_genre['genres'].isin(selected_genres)]
     genre_avg_rating = filtered_df.groupby('genres')['rating'].mean().reset_index()
     genre_avg_rating = genre_avg_rating.rename(columns={'rating': 'average_rating'})
     genre_avg_rating = genre_avg_rating.sort_values(by='average_rating', ascending=False)
 
-    #rating distribution of selected genres
-    genre_rating_histogram = px.histogram(filtered_df, x="rating", color='genres', barmode='stack', title='Rating Distribution')
+    # Rating distribution of selected genres
+    genre_rating_histogram = px.histogram(
+        filtered_df, 
+        x="rating", 
+        color='genres', 
+        barmode='stack', 
+        title='Rating Distribution'
+    )
 
     fig = px.bar(
         genre_avg_rating,
@@ -342,6 +385,7 @@ def update_graph(selected_genres):
         labels={'genres': 'Genre', 'average_rating': 'Average Rating'}
     )
     fig.update_traces(texttemplate='%{text:.2f}', textposition='inside')
+
     return fig, genre_rating_histogram
 
 # For t-SNE
@@ -353,9 +397,10 @@ def update_graph(selected_genres):
     Input('year-filter', 'value'),
     Input('runtime-filter', 'value'),
     Input('budget-filter', 'value'),
-    Input('language-filter', 'value')
+    Input('language-filter', 'value'),
+    Input('highlighted-movie', 'data')  # New input
 )
-def update_tsne_plot(data, selected_genres, rating_range, year_range, runtime_range, budget_range, selected_languages):
+def update_tsne_plot(data, selected_genres, rating_range, year_range, runtime_range, budget_range, selected_languages, highlighted_title):
     if not data or 'x' not in data:
         return px.scatter(title="Run t-SNE to generate plot.")
 
@@ -364,7 +409,8 @@ def update_tsne_plot(data, selected_genres, rating_range, year_range, runtime_ra
     if isinstance(df_valid['genres'].iloc[0], str):
         df_valid['genres'] = df_valid['genres'].apply(ast.literal_eval)
 
-    df_valid = df_valid[
+    # Filter data
+    df_filtered = df_valid[
         (df_valid['average_rating'] >= rating_range[0]) &
         (df_valid['average_rating'] <= rating_range[1]) &
         (df_valid['year'] >= year_range[0]) &
@@ -376,12 +422,13 @@ def update_tsne_plot(data, selected_genres, rating_range, year_range, runtime_ra
     ]
 
     if selected_genres:
-        df_valid = df_valid[df_valid['genres'].apply(lambda g: all(genre in g for genre in selected_genres))]
+        df_filtered = df_filtered[df_filtered['genres'].apply(lambda g: all(genre in g for genre in selected_genres))]
     if selected_languages:
-        df_valid = df_valid[df_valid['original_language'].isin(selected_languages)]
+        df_filtered = df_filtered[df_filtered['original_language'].isin(selected_languages)]
 
+    # Base scatter plot    
     fig = px.scatter(
-        df_valid,
+        df_filtered,
         x='x',
         y='y',
         hover_name='title',
@@ -394,11 +441,38 @@ def update_tsne_plot(data, selected_genres, rating_range, year_range, runtime_ra
             'budget': True
         },
         color='average_rating',
-        title='Movie Map (Filtered)'
+        title='Movie Map (Filtered)',
     )
-    fig.update_layout(dragmode='zoom')
     fig.update_traces(marker=dict(size=6))
+
+    # Highlight the selected movie
+    if highlighted_title and highlighted_title in df_filtered['title'].values:
+        row = df_filtered[df_filtered['title'] == highlighted_title].iloc[0]
+
+        # Add main scatter layer (fade if highlighted)
+        fig.update_traces(marker=dict(size=6), selector=dict(mode='markers'))
+
+        # Add overlay marker for highlighted movie
+        fig.add_scatter(
+            x=[row['x']],
+            y=[row['y']],
+            mode='markers+text',
+            name='Selected Movie',
+            text=[row['title']],
+            textposition='top center',
+            marker=dict(
+                color='black',       # non-blending
+                size=10,             # smaller than before
+                symbol='circle-open-dot',
+                line=dict(color='red', width=2)
+            ),
+            hoverinfo='skip',  # avoid duplication of tooltip
+            showlegend=True     # ✅ clickable legend icon!
+        )
+
+    fig.update_layout(dragmode='zoom')
     return fig
+
 
 
 @app.callback(
@@ -455,19 +529,23 @@ def update_tsne(n_clicks, selected_features, perplexity):
 
 #Find movie written in field on the graph
 @app.callback(
-        Output('movie-coordinates','children'),
-        Input('find-in-graph','n_clicks'),
-        State('tsne-data','data'),
-        State('movie-field','value'),
-        prevent_initial_call=True
+    Output('movie-coordinates', 'children'),
+    Output('highlighted-movie', 'data'),
+    Input('find-in-graph', 'n_clicks'),
+    State('tsne-data', 'data'),
+    State('movie-field', 'value'),
+    prevent_initial_call=True
 )
-def find_movie(n_clicks,data,movie_name):
+def find_movie(n_clicks, data, movie_name):
     df_find = pd.DataFrame(data)
 
-    x = df_find.loc[df_find['title'] == movie_name, 'x']
-    y = df_find.loc[df_find['title'] == movie_name, 'y']
+    if movie_name not in df_find['title'].values:
+        return "Movie not found in t-SNE data.", None
 
-    return "The coordinates are: (" + str(x.iloc[0]) + "," + str(y.iloc[0]) + ")"
+    row = df_find[df_find['title'] == movie_name].iloc[0]
+    x, y = row['x'], row['y']
+
+    return f"Movie found and highlighted", movie_name
 
 #Select from map
 # @app.callback(
